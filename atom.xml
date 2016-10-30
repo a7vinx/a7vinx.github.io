@@ -4,9 +4,9 @@
   
   <link href="/atom.xml" rel="self"/>
   
-  <link href="http://arvin-x.github.io/"/>
+  <link href="http://a7vinx.github.io/"/>
   <updated>2016-10-29T15:39:36.156Z</updated>
-  <id>http://arvin-x.github.io/</id>
+  <id>http://a7vinx.github.io/</id>
   
   <author>
     <name>Arvin.X</name>
@@ -17,8 +17,8 @@
   
   <entry>
     <title>Linux下Glibc 堆的malloc及free过程分析</title>
-    <link href="http://arvin-x.github.io/2016/10/29/linux_heap_analysis/"/>
-    <id>http://arvin-x.github.io/2016/10/29/linux_heap_analysis/</id>
+    <link href="http://a7vinx.github.io/2016/10/29/linux_heap_analysis/"/>
+    <id>http://a7vinx.github.io/2016/10/29/linux_heap_analysis/</id>
     <published>2016-10-29T15:39:36.168Z</published>
     <updated>2016-10-29T15:39:36.156Z</updated>
     
