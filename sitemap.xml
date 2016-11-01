@@ -2,9 +2,16 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
-    <loc>http://a7vinx.github.io/2016/10/29/linux_heap_analysis/</loc>
+    <loc>http://a7vinx.github.io/2016/05/29/linux_heap_analysis/</loc>
     
-    <lastmod>2016-10-29T15:39:36.156Z</lastmod>
+    <lastmod>2016-11-01T12:18:38.440Z</lastmod>
+    
+  </url>
+  
+  <url>
+    <loc>http://a7vinx.github.io/2016/06/07/alictf_2016_fb_writeup/</loc>
+    
+    <lastmod>2016-11-01T12:18:38.356Z</lastmod>
     
   </url>
   

