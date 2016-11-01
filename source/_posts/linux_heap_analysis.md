@@ -8,7 +8,7 @@ date: 2016/05/29 21:03:00
 
 <!--more-->
 
-## 分配 ##
+## 分配 
 （fastbin的分配发生在链表的头部，其余都发生在链表尾部）
 （在fast链表中是精确分配（只有大小完全符合才会分配）
     unsorted链表除非是remainder chunk时非精确分配，其余都是精确分配
@@ -28,22 +28,22 @@ date: 2016/05/29 21:03:00
 5、使用binmap从之前确立的bins中的index链表开始，使用binmap加快搜索，找到最适合的可分配的链表（使用位运算，如果没有直接跳到下一步），然后拿出链表最后一个chunk（大小肯定是够的），然后分割分配（如果分割之后的大小小于MINSIZE就不尽兴分割），然后剩下的成为remainder chunk放入unsorted bin头部（和之前一样），然后返回
 6、开始使用top chunk分配，先看top能不能满足，如果能满足切割分配，剩下的继续成为top chunk，否则看是否还有fastbin，如果有进行清fastbin操作再重新计算index，跳转到3继续循环（源码注释中说这样的循环最多这么一次，因为本来唯一可能循环的路径（存在fastbin）下一次不可能再满足），否则进行sysmalloc然后返回
 
-#### 关于sysmalloc ####
+#### 关于sysmalloc 
 1、只要要分配的chunk大小超过阈值且已经mmap的内存数量没超过阈值，就会进行mmap分配（或者没有获取到arena也会mmap，mmap分配失败就会直接返回0）
 2、然后看是否是main_arena，不是的话试图grow当前heap，失败则mmap一个新的heap，开辟新的heap后将old top chunk末端设置两个fencepost（就是一个极小的被标记为以使用的chunk，应该比MINSIZE还小，应该是8字节，在当前heap的最末端，如果top chunk大小不够MINSIZE，就全部设置为fencepost），然后free掉被删掉fencepost的top chunk（应该是放入到unsorted中），如果尝试new_heap也失败了还没有试过mmap分配，去尝试mmap分配
 如果是main_arena，调整所需的size进行brk分配，失败则尝试mmap分配，然后根据结果进行调整（处理一下分配失败、brk不增反减的情况，处理contiguous标志等等）
 最后再从top chunk中分配
 
-#### 按fast bin、small bin、large bin分 ####
+#### 按fast bin、small bin、large bin分 
 1、fast bin就是看一下fast链表，有正好合适的就分，否则和small 一样
 2、small bin先看small bins中有没有，然后遍历unsorted bin寻找（通过精确或者remainder，unsorted chunk 会被放回相应的small bin或large bin），然后使用binmap进行尽量合适分配（任何一次分割剩下的会成为remainder chunk，除了top），再不然就top或找系统
 3、large bin直接找unsorted bin，不行就往后找（使用binmap），否则top或系统
 
-#### 关于巨块的分配 ####
+#### 关于巨块的分配 
 没有看到源代码中有对于巨块的直接交给mmap处理的代码，应该是跟着整个流程走一遍然后能分配就分配否则mmap
 mmap分配的未必就一定是大的chunk
 
-## 释放 ##
+## 释放 
 （所有chunk的释放都是插入链表头部）
 然后做一些基本的检查，比如size大小等
 1、如果是fast bin直接返回给fast bin，在fast bin中不会发生合并（chunk一直被标记为占用）
@@ -52,23 +52,23 @@ mmap分配的未必就一定是大的chunk
 （其中如果回收的块是和top chunk相邻的，就直接合并到top chunk中去（如果TRIM_FASTBINS为1（我看到的源码里默认为0），fastbin也会进行合并，否则不合并），并且这些操作中间或有获取锁的操作保证安全）
 3、直接munmap返回给操作系统
 
-#### 来自源码中的注释 ####
+#### 来自源码中的注释 
 chunk不会被放回到normal bin中直到它们获得一次被malloc的机会
 Chunks are not placed into regular bins until after they have been given one chance to be used in malloc
 
-#### 关于获取Size ####
+#### 关于获取Size 
 获取fd的size是将当前指针＋当前size后－4，获取bk的size是直接用当前chunk中的prev_size（如果前一个chunk正在使用的话似乎也不用获取他的size）
 
-## 关于堆的收缩 ##
+## 关于堆的收缩 
 如果top chunk的大小过大（应该是超过一个heap segment，但是参考中的中文资料说子线程中的Top chunk一旦达到一个Heap Segment大小就会在这次free操作时归还给操作系统，但是如果整好处于边缘值岂不会造成mmap－munmap－mmap－munmap的浪费操作？）会将这块内存还给系统，但是会至少留下一部分内存继续作为top chunk
 
-#### 来自源码中的注释 ####
+#### 来自源码中的注释 
 收缩过程使用madvise的MADV_DONTNEED标志，表明这块内存不会再被访问，这是向内存管理器发出的建议，内存管理器会采取适当处理
 
 
 
 最后附一张图：
-![heap.png][2]
+![linux_heap_analysis0.png][2]
 
 
 [1]: https://sploitfun.wordpress.com/2015/02/10/understanding-glibc-malloc/
