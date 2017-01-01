@@ -5,7 +5,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://a7vinx.github.io/"/>
-  <updated>2017-01-01T11:30:07.704Z</updated>
+  <updated>2017-01-01T11:45:05.748Z</updated>
   <id>http://a7vinx.github.io/</id>
   
   <author>
@@ -20,7 +20,7 @@
     <link href="http://a7vinx.github.io/2016/12/04/cve_2015_3636/"/>
     <id>http://a7vinx.github.io/2016/12/04/cve_2015_3636/</id>
     <published>2016-12-04T06:51:00.000Z</published>
-    <updated>2017-01-01T11:30:07.704Z</updated>
+    <updated>2017-01-01T11:45:05.748Z</updated>
     
     <content type="html"><![CDATA[<p>CVE-2015-3636，由Keen Team发现的Linux内核UAF漏洞（Keen Team的paper：<a href="https://www.blackhat.com/docs/us-15/materials/us-15-Xu-Ah-Universal-Android-Rooting-Is-Back-wp.pdf" target="_blank" rel="external">Own your Android! Yet Another Universal Root</a>），可以用来提权，但是在x86_64上只能导致内核panic。影响范围为4.0.3以下的Linux内核，可用于Android 6.0以下的系统Root。</p>
 <a id="more"></a>
@@ -45,10 +45,14 @@
 <figure class="highlight c"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div></pre></td><td class="code"><pre><div class="line"><span class="number">2286</span> <span class="function"><span class="keyword">void</span> <span class="title">ip_mc_drop_socket</span><span class="params">(<span class="keyword">struct</span> sock *sk)</span>                                                                                                       </span></div><div class="line">2287 &#123;       </div><div class="line"><span class="number">2288</span>     <span class="keyword">struct</span> inet_sock *inet = inet_sk(sk);</div><div class="line"><span class="number">2289</span>     <span class="keyword">struct</span> ip_mc_socklist *iml;</div><div class="line"><span class="number">2290</span>     <span class="keyword">struct</span> net *net = sock_net(sk);</div><div class="line"><span class="number">2291</span> </div><div class="line"><span class="number">2292</span>     <span class="keyword">if</span> (inet-&gt;mc_list == <span class="literal">NULL</span>)</div><div class="line"><span class="number">2293</span>         <span class="keyword">return</span>;</div><div class="line"><span class="number">2294</span> </div><div class="line">...		 [...]</div></pre></td></tr></table></figure>
 <ul>
 <li>关于JOP链，一开始找的时候执着于找到paper中的core gadget，想着能够复用gadget可以省事，结果还不如直接找更快些，真的是被恶心到了…</li>
-<li>关于确认task_struct位置，可以利用task_struct中的三个cpu_timers的next和prev指针相同以及real_cred与cred相同的特性来避免硬编码offset，提高exp的通用性。</li>
-<li>关于绕过SELinux，Keen Team的另一个slide：<a href="http://www.slideshare.net/jiahongfang5/mosec2015-jfang" target="_blank" rel="external">How to Root 10 Million Phones with One Exploit</a>    也详细讲述了利用思路，真是让人陶醉。</li>
-<li>可实际上即便拿到了u:r:init:s0的context，却依然是受到限制的，这里还需要继续研究</li>
+<li>关于确认task_struct位置，可以利用task_struct中的三个cpu_timers的next和prev指针相同以及real_cred与cred相同的特性来避免硬编码offset，提高exp的通用性。<ul>
+<li>关于绕过SELinux，Keen Team的另一个slide：<a href="http://www.slideshare.net/jiahongfang5/mosec2015-jfang" target="_blank" rel="external">How to Root 10 Million Phones with One Exploit</a>也详细讲述了利用思路，真是让人陶醉。</li>
 </ul>
+</li>
+<li>可实际上即便拿到了u:r:init:s0的context，却依然是受到限制的，这里还需要继续研究</li>
+<li>除了使用JOP去改写addr_limit以外，还可以劫持PC到内核中调用了set_fs(KERNEL_DS)的代码后面去，这样就可以让内核为我们修改addr_limit，当然要保证跳过去之后的控制流依然在我们的掌控中，比如像kernel_setsockopt这样的函数就可以：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div></pre></td><td class="code"><pre><div class="line"><span class="number">3331</span> <span class="function"><span class="keyword">int</span> <span class="title">kernel_setsockopt</span><span class="params">(<span class="keyword">struct</span> socket *sock, <span class="keyword">int</span> level, <span class="keyword">int</span> optname,</span></span></div><div class="line"><span class="number">3332</span>             <span class="keyword">char</span> *optval, <span class="keyword">unsigned</span> <span class="keyword">int</span> optlen)                                                                                                </div><div class="line">3333 &#123;</div><div class="line"><span class="number">3334</span>     <span class="keyword">mm_segment_t</span> oldfs = get_fs();</div><div class="line"><span class="number">3335</span>     <span class="keyword">char</span> __user *uoptval;</div><div class="line"><span class="number">3336</span>     <span class="keyword">int</span> err;</div><div class="line"><span class="number">3337</span> </div><div class="line"><span class="number">3338</span>     uoptval = (<span class="keyword">char</span> __user __force *) optval;</div><div class="line"><span class="number">3339</span> </div><div class="line"><span class="number">3340</span>     set_fs(KERNEL_DS);</div><div class="line"><span class="number">3341</span>     <span class="keyword">if</span> (level == SOL_SOCKET)</div><div class="line"><span class="number">3342</span>         err = sock_setsockopt(sock, level, optname, uoptval, optlen);</div><div class="line"><span class="number">3343</span>     <span class="keyword">else</span></div><div class="line"><span class="number">3344</span>         err = sock-&gt;ops-&gt;setsockopt(sock, level, optname, uoptval,</div><div class="line"><span class="number">3345</span>                         optlen);</div><div class="line"><span class="number">3346</span>     set_fs(oldfs);</div><div class="line"><span class="number">3347</span>     <span class="keyword">return</span> err;</div><div class="line"><span class="number">3348</span> &#125;</div></pre></td></tr></table></figure>
 <p>最后分享一句在看Android的sepolicy文件时看到的注释，看得我害怕地躲在角落瑟瑟发抖：</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">65 # - You are running an exploit which switched to the init task credentials</div><div class="line">66 #   and is then trying to exec a shell or other program.  You lose!</div></pre></td></tr></table></figure>
 ]]></content>
